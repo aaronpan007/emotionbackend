@@ -2147,7 +2147,7 @@ const transcribeAudioWithWhisper = async (audioBuffer, filename) => {
     // 第5步：直接调用 Replicate Whisper API（使用内存Buffer）
     console.log('🔍 第5步：调用 Replicate Whisper API（内存流模式）...');
     console.log('📤 API调用参数:');
-    console.log(`   - model: openai/whisper:large-v3`);
+    console.log(`   - model: openai/whisper:large-v3 (完整版本哈希)`);
     console.log(`   - language: zh`);
     console.log(`   - provider: Replicate`);
     console.log(`   - file: ${filename} (${fileSizeInMB.toFixed(2)}MB)`);
@@ -2157,7 +2157,7 @@ const transcribeAudioWithWhisper = async (audioBuffer, filename) => {
     
     // 直接使用Buffer数据调用Replicate API
     const output = await replicate.run(
-      "openai/whisper:large-v3",
+      "openai/whisper:8099696689d249cf8b122d833c36ac3f75505c666a395ca40ef26f68e7d3d16e",
       {
         input: {
           audio: audioBuffer, // 直接传递Buffer数据
