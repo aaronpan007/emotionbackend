@@ -1534,9 +1534,17 @@ const processAnalysisTask = async (taskId, userInfo, uploadedFiles) => {
     
     if (ragSystemReady) {
       try {
-        ragKnowledge = await callRAGSystem(userInfo, imageAnalyses, enhancedQuery);
+        // 添加超时机制 - 最多等待60秒
+        const ragPromise = callRAGSystem(userInfo, imageAnalyses, enhancedQuery);
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('RAG检索超时')), 60000); // 60秒超时
+        });
+        
+        ragKnowledge = await Promise.race([ragPromise, timeoutPromise]);
+        console.log('✅ RAG检索完成');
       } catch (ragError) {
-        console.warn(`⚠️ RAG检索失败: ${ragError.message}`);
+        console.warn(`⚠️ RAG检索失败或超时: ${ragError.message}`);
+        console.log('🔄 使用快速分析模式继续...');
         ragKnowledge = generateFallbackReport();
       }
     } else {
