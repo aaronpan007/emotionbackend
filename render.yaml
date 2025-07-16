@@ -17,9 +17,5 @@ services:
           name: ai-emotional-safety-backend
           property: port
     healthCheckPath: /api/health
-    disk:
-      name: backend-storage
-      mountPath: /opt/render/project/src/storage
-      sizeGB: 1
     autoDeploy: true
     branch: main 
