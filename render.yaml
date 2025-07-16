@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: ai-emotional-safety-backend
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: |
+      npm install
+      pip install -r requirements.txt
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        fromService:
+          type: web
+          name: ai-emotional-safety-backend
+          property: port
+    healthCheckPath: /api/health
+    disk:
+      name: backend-storage
+      mountPath: /opt/render/project/src/storage
+      sizeGB: 1
+    autoDeploy: true
+    branch: main 
