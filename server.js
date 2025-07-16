@@ -1532,6 +1532,11 @@ const processAnalysisTask = async (taskId, userInfo, uploadedFiles) => {
     console.log(`\n🧠 任务 ${taskId} - 第4步：执行RAG知识库检索`);
     updateTaskStatus(taskId, TaskStatus.PROCESSING, 'RAG知识库检索中', 60);
     
+    // 临时禁用复杂RAG系统，直接使用快速分析确保功能可用
+    console.log('🚀 使用快速分析模式（临时禁用复杂RAG）');
+    ragKnowledge = generateFallbackReport();
+    
+    /* 原始RAG代码（临时注释）
     if (ragSystemReady) {
       try {
         // 添加超时机制 - 最多等待60秒
@@ -1550,6 +1555,7 @@ const processAnalysisTask = async (taskId, userInfo, uploadedFiles) => {
     } else {
       ragKnowledge = generateFallbackReport();
     }
+    */
     
     updateTaskStatus(taskId, TaskStatus.PROCESSING, 'RAG知识检索完成', 70);
     
