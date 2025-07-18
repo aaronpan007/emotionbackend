@@ -198,7 +198,7 @@ const cleanupOldTasks = () => {
 // 每30分钟清理一次过期任务
 setInterval(cleanupOldTasks, 1800000);
 
-// CORS配置
+// CORS配置 - 更新于2025-07-18
 const corsOptions = {
   origin: [
     'http://localhost:3000',
