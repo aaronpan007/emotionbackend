@@ -2,9 +2,10 @@
 
 ## ✅ 部署前检查
 
-- [ ] 确认 `render.yaml` 文件存在
-- [ ] 确认 `package.json` 配置正确
-- [ ] 确认 `requirements.txt` 存在
+- [x] 确认 `render.yaml` 文件存在 ✅ 已优化
+- [x] 确认 `package.json` 配置正确 ✅ Node.js 18.x
+- [x] 确认 `requirements.txt` 存在 ✅ 最小化依赖 
+- [x] **依赖冲突已修复** ✅ 稳定版本配置
 - [ ] 准备好 OpenAI API Key
 - [ ] 准备好 Replicate API Token
 

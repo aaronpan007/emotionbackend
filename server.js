@@ -47,19 +47,19 @@ if (!process.env.OPENAI_API_KEY) {
   process.exit(1);
 }
 
-if (!process.env.OPENAI_API_BASE) {
-  console.warn('⚠️  警告: 未设置OPENAI_API_BASE环境变量');
+if (!process.env.OPENAI_API_BASE && !process.env.OPENAI_BASE_URL) {
+  console.warn('⚠️  警告: 未设置OPENAI_API_BASE或OPENAI_BASE_URL环境变量');
   console.warn('将使用默认OpenAI API地址');
 }
 
 // 初始化OpenAI客户端 - 用于图片分析和情感评估
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_API_BASE || 'https://api.openai.com/v1',
+  baseURL: process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
 });
 
 console.log('✅ OpenAI GPT-4o客户端初始化完成');
-console.log('🔗 API地址:', process.env.OPENAI_API_BASE || 'https://api.openai.com/v1');
+console.log('🔗 API地址:', process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1');
 
 /**
  * 检查RAG（检索增强生成）系统是否就绪
@@ -198,8 +198,20 @@ const cleanupOldTasks = () => {
 // 每30分钟清理一次过期任务
 setInterval(cleanupOldTasks, 1800000);
 
+// CORS配置
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://your-frontend-app.vercel.app',
+    process.env.FRONTEND_URL
+  ].filter(Boolean), // 过滤掉undefined值
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
 // 中间件
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -3228,4 +3240,115 @@ app.post('/api/post_date_debrief', postDateUpload.single('audio'), async (req, r
       fallback_response: "很抱歉，系统暂时遇到了技术问题。请稍后重试。\n\n在等待的同时，请记住：\n\n💡 **情感自助建议**：\n- 深呼吸，保持冷静\n- 诚实面对自己的感受\n- 考虑对方的立场和感受\n- 专注于建设性的沟通\n\n如果是紧急情感困扰，建议寻求专业心理咨询师的帮助。"
     });
   }
+});
+
+/**
+ * =====================================================
+ * 健康检查和系统状态 API
+ * =====================================================
+ */
+
+// 健康检查端点
+app.get('/api/health', async (req, res) => {
+  console.log('🏥 健康检查请求');
+  
+  try {
+    const healthStatus = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      version: '3.0.0',
+      services: {
+        api: 'running',
+        openai: 'unknown',
+        rag_system: 'unknown',
+        replicate: process.env.REPLICATE_API_TOKEN ? 'configured' : 'missing'
+      },
+      environment: {
+        node_env: process.env.NODE_ENV || 'development',
+        port: PORT,
+        has_openai_key: !!process.env.OPENAI_API_KEY,
+        has_replicate_token: !!process.env.REPLICATE_API_TOKEN,
+        has_r2_config: !!(
+          process.env.CLOUDFLARE_R2_ACCESS_KEY_ID && 
+          process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY &&
+          process.env.CLOUDFLARE_R2_BUCKET_NAME
+        )
+      },
+      cors_origins: corsOptions.origin
+    };
+
+    // 检查OpenAI配置
+    healthStatus.services.openai = process.env.OPENAI_API_KEY ? 'configured' : 'missing';
+
+    // 检查RAG系统状态
+    try {
+      // 简单检查RAG系统文件是否存在
+      const ragFilePath = path.join(__dirname, 'rag_query_service_r2.py');
+      if (require('fs').existsSync(ragFilePath)) {
+        healthStatus.services.rag_system = 'ready';
+      } else {
+        healthStatus.services.rag_system = 'missing';
+      }
+    } catch (error) {
+      healthStatus.services.rag_system = 'error';
+      console.warn('RAG系统检查失败:', error.message);
+    }
+
+    res.json(healthStatus);
+  } catch (error) {
+    console.error('健康检查失败:', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
+// 配置信息端点（仅开发环境）
+app.get('/api/debug/config', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: '生产环境不允许访问配置信息' });
+  }
+
+  const config = {
+    environment: {
+      node_env: process.env.NODE_ENV,
+      port: PORT,
+      cors_origins: corsOptions.origin
+    },
+    api_keys_configured: {
+      openai: !!process.env.OPENAI_API_KEY,
+      replicate: !!process.env.REPLICATE_API_TOKEN
+    },
+    r2_config: {
+      has_access_key: !!process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+      has_secret_key: !!process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+      has_bucket_name: !!process.env.CLOUDFLARE_R2_BUCKET_NAME,
+      has_endpoint: !!process.env.CLOUDFLARE_R2_ENDPOINT
+    }
+  };
+
+  res.json(config);
+});
+
+/**
+ * =====================================================
+ * 服务器启动
+ * =====================================================
+ */
+
+app.listen(PORT, () => {
+  console.log('🚀 ===== 服务器启动完成 =====');
+  console.log(`📡 API服务器运行在: http://localhost:${PORT}`);
+  console.log(`🌍 环境模式: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 OpenAI API地址: ${process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}`);
+  console.log(`🛡️  CORS允许的源: ${corsOptions.origin.join(', ')}`);
+  console.log('📋 可用端点:');
+  console.log('   - POST /api/analyze-images (图片分析)');
+  console.log('   - POST /api/post-date-debrief (约会复盘)');
+  console.log('   - POST /api/transcribe-audio (音频转录)');
+  console.log('   - GET  /api/task-status/:taskId (任务状态)');
+  console.log('   - GET  /api/health (健康检查)');
+  console.log('===========================');
 });

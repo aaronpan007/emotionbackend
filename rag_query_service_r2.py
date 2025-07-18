@@ -104,17 +104,18 @@ class RAGR2QueryService:
     
     def _validate_r2_config(self):
         """验证Cloudflare R2配置"""
+        # 支持两种环境变量命名方式
         required_vars = [
-            "CLOUDFLARE_ACCOUNT_ID",
-            "R2_ACCESS_KEY_ID", 
-            "R2_SECRET_ACCESS_KEY",
-            "BUCKET_NAME"
+            ("CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_R2_ACCOUNT_ID"),
+            ("R2_ACCESS_KEY_ID", "CLOUDFLARE_R2_ACCESS_KEY_ID"), 
+            ("R2_SECRET_ACCESS_KEY", "CLOUDFLARE_R2_SECRET_ACCESS_KEY"),
+            ("BUCKET_NAME", "CLOUDFLARE_R2_BUCKET_NAME")
         ]
         
         missing_vars = []
-        for var in required_vars:
-            if not os.getenv(var):
-                missing_vars.append(var)
+        for primary_var, alt_var in required_vars:
+            if not os.getenv(primary_var) and not os.getenv(alt_var):
+                missing_vars.append(f"{primary_var} 或 {alt_var}")
         
         if missing_vars:
             raise ValueError(f"缺少必需的环境变量: {', '.join(missing_vars)}")
@@ -152,12 +153,12 @@ class RAGR2QueryService:
     
     def _setup_s3fs(self):
         """初始化S3FS文件系统连接R2"""
-        account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-        access_key = os.getenv("R2_ACCESS_KEY_ID")
-        secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+        account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID") or os.getenv("CLOUDFLARE_R2_ACCOUNT_ID")
+        access_key = os.getenv("R2_ACCESS_KEY_ID") or os.getenv("CLOUDFLARE_R2_ACCESS_KEY_ID")
+        secret_key = os.getenv("R2_SECRET_ACCESS_KEY") or os.getenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
         
         # Cloudflare R2的endpoint URL格式
-        endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+        endpoint_url = os.getenv("CLOUDFLARE_R2_ENDPOINT") or f"https://{account_id}.r2.cloudflarestorage.com"
         
         try:
             self.s3fs = s3fs.S3FileSystem(
@@ -168,7 +169,7 @@ class RAGR2QueryService:
             )
             
             # 测试连接
-            bucket_name = os.getenv("BUCKET_NAME")
+            bucket_name = os.getenv("BUCKET_NAME") or os.getenv("CLOUDFLARE_R2_BUCKET_NAME")
             if not self.s3fs.exists(bucket_name):
                 raise ValueError(f"R2存储桶不存在或无法访问: {bucket_name}")
             
@@ -180,7 +181,7 @@ class RAGR2QueryService:
     def load_index_from_r2(self):
         """从Cloudflare R2加载索引"""
         try:
-            bucket_name = os.getenv("BUCKET_NAME")
+            bucket_name = os.getenv("BUCKET_NAME") or os.getenv("CLOUDFLARE_R2_BUCKET_NAME")
             
             # 检查必需的索引文件是否存在
             required_files = [
@@ -200,10 +201,10 @@ class RAGR2QueryService:
             
             try:
                 # 配置S3兼容的存储上下文
-                account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-                access_key = os.getenv("R2_ACCESS_KEY_ID")
-                secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
-                endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+                account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID") or os.getenv("CLOUDFLARE_R2_ACCOUNT_ID")
+                access_key = os.getenv("R2_ACCESS_KEY_ID") or os.getenv("CLOUDFLARE_R2_ACCESS_KEY_ID")
+                secret_key = os.getenv("R2_SECRET_ACCESS_KEY") or os.getenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+                endpoint_url = os.getenv("CLOUDFLARE_R2_ENDPOINT") or f"https://{account_id}.r2.cloudflarestorage.com"
                 
                 # 创建基于R2的KV存储
                 kv_store = S3DBKVStore(
