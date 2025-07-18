@@ -3332,23 +3332,4 @@ app.get('/api/debug/config', (req, res) => {
   res.json(config);
 });
 
-/**
- * =====================================================
- * 服务器启动
- * =====================================================
- */
-
-app.listen(PORT, () => {
-  console.log('🚀 ===== 服务器启动完成 =====');
-  console.log(`📡 API服务器运行在: http://localhost:${PORT}`);
-  console.log(`🌍 环境模式: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 OpenAI API地址: ${process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}`);
-  console.log(`🛡️  CORS允许的源: ${corsOptions.origin.join(', ')}`);
-  console.log('📋 可用端点:');
-  console.log('   - POST /api/analyze-images (图片分析)');
-  console.log('   - POST /api/post-date-debrief (约会复盘)');
-  console.log('   - POST /api/transcribe-audio (音频转录)');
-  console.log('   - GET  /api/task-status/:taskId (任务状态)');
-  console.log('   - GET  /api/health (健康检查)');
-  console.log('===========================');
-});
+// 重复的服务器启动代码已删除 - 服务器已在前面启动
