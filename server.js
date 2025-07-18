@@ -203,6 +203,7 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
+    'https://emotionfront.vercel.app',
     'https://your-frontend-app.vercel.app',
     process.env.FRONTEND_URL
   ].filter(Boolean), // 过滤掉undefined值
