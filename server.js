@@ -3306,6 +3306,302 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+/**
+ * =====================================================
+ * 异步任务管理系统 - 解决Render 60秒超时问题
+ * =====================================================
+ */
+
+// 内存中的任务存储
+const taskStore = new Map();
+
+// 任务状态枚举
+const TASK_STATUS = {
+  PENDING: 'pending',
+  PROCESSING: 'processing', 
+  COMPLETED: 'completed',
+  FAILED: 'failed'
+};
+
+// 创建新异步任务
+function createAsyncTask(taskType, inputData) {
+  const taskId = uuidv4();
+  const task = {
+    id: taskId,
+    type: taskType,
+    status: TASK_STATUS.PENDING,
+    inputData,
+    result: null,
+    error: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    progress: 0
+  };
+  
+  taskStore.set(taskId, task);
+  console.log(`📋 创建任务: ${taskId} (类型: ${taskType})`);
+  return taskId;
+}
+
+// 更新任务状态
+function updateTask(taskId, updates) {
+  const task = taskStore.get(taskId);
+  if (task) {
+    Object.assign(task, updates, { updatedAt: new Date() });
+    taskStore.set(taskId, task);
+    console.log(`📋 更新任务: ${taskId} -> ${task.status}`);
+  }
+}
+
+// 获取任务状态
+app.get('/api/task-status/:taskId', (req, res) => {
+  const { taskId } = req.params;
+  const task = taskStore.get(taskId);
+  
+  if (!task) {
+    return res.status(404).json({
+      success: false,
+      error: '任务不存在'
+    });
+  }
+  
+  res.json({
+    success: true,
+    task: {
+      id: task.id,
+      type: task.type,
+      status: task.status,
+      progress: task.progress,
+      result: task.result,
+      error: task.error,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    }
+  });
+});
+
+// 异步Post-Date分析处理函数
+async function processPostDateAnalysisAsync(taskId, inputData) {
+  try {
+    updateTask(taskId, { 
+      status: TASK_STATUS.PROCESSING, 
+      progress: 10 
+    });
+
+    const { user_input, conversation_history, audioFile } = inputData;
+    
+    // 步骤1: 音频转录（如果有）
+    let finalUserInput = user_input || '';
+    if (audioFile) {
+      updateTask(taskId, { progress: 20 });
+      console.log('🎙️ 处理音频转录...');
+      
+      try {
+        const transcription = await openai.audio.transcriptions.create({
+          file: fs.createReadStream(audioFile.path),
+          model: 'whisper-1',
+          language: 'zh'
+        });
+        
+        finalUserInput = transcription.text || finalUserInput;
+        console.log('✅ 音频转录完成:', finalUserInput.substring(0, 50) + '...');
+      } catch (error) {
+        console.error('❌ 音频转录失败:', error.message);
+        // 继续使用文本输入
+      }
+    }
+    
+    // 步骤2: RAG知识库查询
+    updateTask(taskId, { progress: 30 });
+    console.log('📚 开始RAG知识库查询...');
+    
+    let ragContext = '';
+    try {
+      const ragResult = await performRAGQueryAsync(finalUserInput, 'post_date_debrief_diversity');
+      ragContext = ragResult.context || '';
+      console.log('✅ RAG查询完成');
+    } catch (error) {
+      console.error('❌ RAG查询失败:', error.message);
+    }
+    
+    updateTask(taskId, { progress: 60 });
+    
+    // 步骤3: GPT-4o分析
+    console.log('🧠 开始GPT-4o情感教练分析...');
+    
+    const systemPrompt = `你是一位具有丰富经验的情感教练，专门帮助用户分析约会情况并提供专业建议。
+
+基础分析信息：
+${ragContext}
+
+用户咨询内容：
+${finalUserInput}
+
+请提供专业的约会后复盘分析，包括：
+1. **情况评估**：客观分析约会中的关键信息
+2. **行为模式识别**：识别对方的沟通方式和行为特征
+3. **情感安全评估**：评估这段关系的健康程度
+4. **具体建议**：提供实用的下一步行动建议
+5. **成长指导**：帮助用户从这次经历中学习和成长
+
+请用温暖、专业的语调回复，避免过于学术化的表达。`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: finalUserInput }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000
+    });
+    
+    updateTask(taskId, { progress: 90 });
+    
+    const analysis = completion.choices[0]?.message?.content || '分析生成失败，请重试。';
+    
+    // 完成任务
+    const result = {
+      success: true,
+      response: analysis,
+      metadata: {
+        processing_steps: [
+          audioFile ? '音频转录' : null,
+          'RAG知识库查询',
+          'GPT-4o情感教练分析'
+        ].filter(Boolean),
+        processing_type: 'async_full_analysis',
+        has_audio: !!audioFile,
+        has_transcription: !!audioFile,
+        response_length: analysis.length,
+        tokens_used: completion.usage?.total_tokens || 0,
+        model_used: 'gpt-4o',
+        timestamp: new Date().toISOString()
+      }
+    };
+    
+    updateTask(taskId, { 
+      status: TASK_STATUS.COMPLETED, 
+      progress: 100,
+      result 
+    });
+    
+    console.log(`✅ 任务完成: ${taskId}`);
+    
+  } catch (error) {
+    console.error(`❌ 任务失败: ${taskId}`, error);
+    updateTask(taskId, { 
+      status: TASK_STATUS.FAILED, 
+      error: error.message 
+    });
+  } finally {
+    // 清理音频文件
+    if (inputData.audioFile && fs.existsSync(inputData.audioFile.path)) {
+      fs.unlinkSync(inputData.audioFile.path);
+    }
+  }
+}
+
+// 异步RAG查询函数
+function performRAGQueryAsync(userInput, queryType) {
+  return new Promise((resolve, reject) => {
+    const ragInputData = {
+      query: userInput,
+      query_type: queryType,
+      timestamp: new Date().toISOString()
+    };
+    
+    const ragProcess = spawn('python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    
+    const timeout = setTimeout(() => {
+      ragProcess.kill();
+      reject(new Error('RAG查询超时（300秒）'));
+    }, 300000);
+    
+    let stdout = '';
+    let stderr = '';
+    
+    ragProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+    
+    ragProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+    
+    ragProcess.on('close', (code) => {
+      clearTimeout(timeout);
+      
+      if (code === 0) {
+        try {
+          const result = JSON.parse(stdout);
+          resolve(result);
+        } catch (error) {
+          reject(new Error('RAG响应解析失败'));
+        }
+      } else {
+        reject(new Error(`RAG查询失败: ${stderr}`));
+      }
+    });
+  });
+}
+
+// 新的异步Post-Date端点
+app.post('/api/post-date-debrief-async', postDateUpload.single('audio'), async (req, res) => {
+  console.log('🚀 ===== 异步约会后复盘API请求 =====');
+  
+  try {
+    const { user_input, conversation_history } = req.body;
+    const audioFile = req.file;
+    
+    // 验证输入
+    if (!user_input && !audioFile) {
+      return res.status(400).json({
+        success: false,
+        error: '需要提供用户输入或音频文件'
+      });
+    }
+    
+    // 创建异步任务
+    const taskId = createAsyncTask('post_date_analysis', {
+      user_input,
+      conversation_history,
+      audioFile: audioFile ? {
+        path: audioFile.path,
+        originalname: audioFile.originalname,
+        size: audioFile.size
+      } : null
+    });
+    
+    // 立即返回任务ID
+    res.json({
+      success: true,
+      taskId,
+      message: '分析任务已创建，请稍后查询结果',
+      statusUrl: `/api/task-status/${taskId}`
+    });
+    
+    // 异步处理任务
+    processPostDateAnalysisAsync(taskId, {
+      user_input,
+      conversation_history,
+      audioFile
+    }).catch(error => {
+      console.error('异步任务处理失败:', error);
+    });
+    
+  } catch (error) {
+    console.error('❌ 创建异步任务失败:', error);
+    res.status(500).json({
+      success: false,
+      error: '创建分析任务失败',
+      details: error.message
+    });
+  }
+});
+
 // 配置信息端点（仅开发环境）
 app.get('/api/debug/config', (req, res) => {
   if (process.env.NODE_ENV === 'production') {
