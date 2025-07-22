@@ -198,17 +198,23 @@ const cleanupOldTasks = () => {
 // 每30分钟清理一次过期任务
 setInterval(cleanupOldTasks, 1800000);
 
-// CORS配置 - 更新于2025-07-18
+// CORS配置 - 更新于2025-07-22 (添加更宽松的配置解决跨域问题)
 const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
     'https://emotionfront.vercel.app',
+    'https://emotion-analysis-tau.vercel.app', // 可能的新域名
     'https://your-frontend-app.vercel.app',
-    process.env.FRONTEND_URL
+    process.env.FRONTEND_URL,
+    // 添加通配符支持所有vercel.app域名
+    /https:\/\/.*\.vercel\.app$/
   ].filter(Boolean), // 过滤掉undefined值
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  // 添加预检请求支持
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With']
 };
 
 // 中间件
