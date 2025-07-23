@@ -936,7 +936,7 @@ const callRAGSystem = async (userInfo, imageInfos, enhancedQuery = null) => {
       console.log('   查询类型: pre_date_scan_enhanced_diversity');
       
       // 调用增强版Python RAG查询服务（使用多样性强制均衡）
-      const pythonProcess = spawn('python', ['rag_query_service_enhanced.py', inputJson], {
+      const pythonProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', inputJson], {
         cwd: __dirname,
         stdio: ['pipe', 'pipe', 'pipe'],
         encoding: 'utf8'
@@ -1551,11 +1551,6 @@ const processAnalysisTask = async (taskId, userInfo, uploadedFiles) => {
     console.log(`\n🧠 任务 ${taskId} - 第4步：执行RAG知识库检索`);
     updateTaskStatus(taskId, TaskStatus.PROCESSING, 'RAG知识库检索中', 60);
     
-    // 临时禁用复杂RAG系统，直接使用快速分析确保功能可用
-    console.log('🚀 使用快速分析模式（临时禁用复杂RAG）');
-    ragKnowledge = generateFallbackReport();
-    
-    /* 原始RAG代码（临时注释）
     if (ragSystemReady) {
       try {
         // 添加超时机制 - 最多等待60秒
@@ -1574,7 +1569,6 @@ const processAnalysisTask = async (taskId, userInfo, uploadedFiles) => {
     } else {
       ragKnowledge = generateFallbackReport();
     }
-    */
     
     updateTaskStatus(taskId, TaskStatus.PROCESSING, 'RAG知识检索完成', 70);
     
@@ -2152,7 +2146,11 @@ const transcribeAudioWithWhisper = async (audioBuffer, filename) => {
     const fileSizeInMB = audioBuffer.length / (1024 * 1024);
     
     if (audioBuffer.length === 0) {
-      throw new Error('音频数据为空（0字节）');
+      throw new Error('音频数据为空，请重新录制语音');
+    }
+    
+    if (audioBuffer.length < 100) {
+      throw new Error('音频数据过小，可能录制失败，请重新录制');
     }
     
     if (fileSizeInMB > 25) {
@@ -2188,12 +2186,20 @@ const transcribeAudioWithWhisper = async (audioBuffer, filename) => {
     
     const startTime = Date.now();
     
-    // 直接使用Buffer数据调用Replicate API
+    // 将音频Buffer转换为Replicate API期望的data URL格式
+    const base64Audio = audioBuffer.toString('base64');
+    const mimeType = `audio/${fileExtension.slice(1)}`;
+    const dataUrl = `data:${mimeType};base64,${base64Audio}`;
+    
+    console.log('📤 准备音频数据，格式:', mimeType);
+    console.log('📊 Base64编码长度:', base64Audio.length);
+    
+    // 调用Replicate API
     const output = await replicate.run(
       "openai/whisper:8099696689d249cf8b122d833c36ac3f75505c666a395ca40ef26f68e7d3d16e",
       {
         input: {
-          audio: audioBuffer, // 直接传递Buffer数据
+          audio: dataUrl, // 传递data URL格式的音频数据
           model: "large-v3",
           language: "zh",
           temperature: 0.0,
@@ -2327,8 +2333,9 @@ const callPostDateRAGSystem = async (userQuestion, conversationHistory = []) => 
     console.log('   查询类型: post_date_debrief_diversity');
     
     // 调用增强版Python RAG系统，使用多样性强制检索机制
-    const ragProcess = spawn('python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
-      stdio: ['pipe', 'pipe', 'pipe']
+    const ragProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: __dirname
     });
     
     // 设置超时
@@ -2439,8 +2446,9 @@ const callPostDateRAGSystemWithEnhancedQuery = async (enhancedQuery, originalUse
     console.log('   查询类型: post_date_debrief_enhanced_diversity');
     
     // 调用增强版Python RAG系统，使用多样性强制检索机制
-    const ragProcess = spawn('python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
-      stdio: ['pipe', 'pipe', 'pipe']
+    const ragProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: __dirname
     });
     
     // 设置超时
@@ -3076,7 +3084,28 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
 // 1. 先用GPT-4o改写和扩展用户问题
 // 2. 再用扩展后的问题进行RAG检索
 // 3. 确保均衡、无偏见的知识库查询
-app.post('/api/post_date_debrief', postDateUpload.single('audio'), async (req, res) => {
+// 创建可选audio上传的中间件
+const optionalAudioUpload = (req, res, next) => {
+  const upload = postDateUpload.single('audio');
+  upload(req, res, (err) => {
+    if (err && err.message === '只允许上传音频文件！') {
+      // 如果没有音频字段或音频字段为空，继续处理
+      req.file = null;
+      next();
+    } else if (err) {
+      // 其他错误仍然抛出
+      return res.status(400).json({
+        success: false,
+        error: err.message,
+        error_type: 'FileUploadError'
+      });
+    } else {
+      next();
+    }
+  });
+};
+
+app.post('/api/post_date_debrief', optionalAudioUpload, async (req, res) => {
   console.log('🎯 ===== 约会后复盘API请求开始 (AI查询扩展版) =====');
   
   try {
@@ -3517,8 +3546,9 @@ function performRAGQueryAsync(userInput, queryType) {
       timestamp: new Date().toISOString()
     };
     
-    const ragProcess = spawn('python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
-      stdio: ['pipe', 'pipe', 'pipe']
+    const ragProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: __dirname
     });
     
     const timeout = setTimeout(() => {
