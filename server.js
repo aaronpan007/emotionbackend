@@ -3520,109 +3520,55 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
 
     const { user_input, conversation_history, audioFile } = inputData;
     
-    // 步骤1: 音频转录（如果有）
-    let finalUserInput = user_input || '';
-    if (audioFile) {
-      updateTask(taskId, { progress: 20 });
-      console.log('🎙️ 处理音频转录...');
-      
-      try {
-        const transcription = await openai.audio.transcriptions.create({
-          file: fs.createReadStream(audioFile.path),
-          model: 'whisper-1',
-          language: 'zh'
-        });
-        
-        finalUserInput = transcription.text || finalUserInput;
-        console.log('✅ 音频转录完成:', finalUserInput.substring(0, 50) + '...');
-      } catch (error) {
-        console.error('❌ 音频转录失败:', error.message);
-        // 继续使用文本输入
-      }
-    }
-    
-    // 步骤2: RAG知识库查询
     updateTask(taskId, { progress: 30 });
-    console.log('📚 开始RAG知识库查询...');
+    console.log('🧠 开始使用同步处理逻辑进行深度分析...');
     
-    let ragContext = '';
+    // 使用已经修复的同步处理函数
     try {
-      const ragResult = await performRAGQueryAsync(finalUserInput, 'post_date_debrief_diversity');
-      ragContext = ragResult.knowledge_answer || '';
-      console.log('✅ RAG查询完成，知识长度:', ragContext.length);
-    } catch (error) {
-      console.error('❌ RAG查询失败:', error.message);
-    }
-    
-    updateTask(taskId, { progress: 60 });
-    
-    // 步骤3: GPT-4o分析
-    console.log('🧠 开始GPT-4o情感教练分析...');
-    
-    const systemPrompt = `你是一位具有丰富经验的情感教练，专门帮助用户分析约会情况并提供专业建议。
-
-基础分析信息：
-${ragContext}
-
-用户咨询内容：
-${finalUserInput}
-
-请提供专业的约会后复盘分析，包括：
-1. **情况评估**：客观分析约会中的关键信息
-2. **行为模式识别**：识别对方的沟通方式和行为特征
-3. **情感安全评估**：评估这段关系的健康程度
-4. **具体建议**：提供实用的下一步行动建议
-5. **成长指导**：帮助用户从这次经历中学习和成长
-
-请用温暖、专业的语调回复，避免过于学术化的表达。`;
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: finalUserInput }
-      ],
-      temperature: 0.7,
-      max_tokens: 2000
-    });
-    
-    updateTask(taskId, { progress: 90 });
-    
-    const analysis = completion.choices[0]?.message?.content || '分析生成失败，请重试。';
-    
-    // 完成任务
-    const result = {
-      success: true,
-      response: analysis,
-      metadata: {
-        processing_steps: [
-          audioFile ? '音频转录' : null,
-          'RAG知识库查询',
-          'GPT-4o情感教练分析'
-        ].filter(Boolean),
-        processing_type: 'async_full_analysis',
-        has_audio: !!audioFile,
-        has_transcription: !!audioFile,
-        response_length: analysis.length,
-        tokens_used: completion.usage?.total_tokens || 0,
-        model_used: 'gpt-4o',
-        timestamp: new Date().toISOString()
+      const result = await processPostDateDebrief(
+        Array.isArray(conversation_history) ? conversation_history : [],
+        user_input,
+        audioFile
+      );
+      
+      updateTask(taskId, { progress: 80 });
+      
+      if (result.success) {
+        updateTask(taskId, { 
+          status: TASK_STATUS.COMPLETED,
+          progress: 100,
+          result: {
+            success: true,
+            response: result.response,
+            metadata: result.metadata
+          }
+        });
+        console.log('✅ 异步分析任务完成');
+      } else {
+        throw new Error(result.error || '分析处理失败');
       }
-    };
-    
-    updateTask(taskId, { 
-      status: TASK_STATUS.COMPLETED, 
-      progress: 100,
-      result 
-    });
-    
-    console.log(`✅ 任务完成: ${taskId}`);
+    } catch (error) {
+      console.error('❌ 分析处理失败:', error.message);
+      updateTask(taskId, {
+        status: TASK_STATUS.FAILED,
+        error: error.message,
+        result: {
+          success: false,
+          error: error.message,
+          response: '很抱歉，分析过程中出现了问题。请稍后重试，或尝试重新描述您的问题。'
+        }
+      });
     
   } catch (error) {
-    console.error(`❌ 任务失败: ${taskId}`, error);
+    console.error(`❌ 异步分析任务失败: ${taskId}`, error);
     updateTask(taskId, { 
       status: TASK_STATUS.FAILED, 
-      error: error.message 
+      error: error.message,
+      result: {
+        success: false,
+        error: error.message,
+        response: '很抱歉，分析过程中出现了问题。请稍后重试，或尝试重新描述您的问题。'
+      }
     });
   } finally {
     // 清理音频文件
