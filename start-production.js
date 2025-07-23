@@ -48,10 +48,11 @@ function checkPythonEnvironment() {
     if (fs.existsSync(indexFile)) {
       console.log('📑 RAG索引文件存在');
     } else {
-      console.warn('⚠️  RAG索引文件不存在，可能需要重建');
+      console.warn('⚠️  RAG索引文件不存在，将使用回退响应模式');
     }
   } else {
-    console.error('❌ 知识库存储目录不存在');
+    console.warn('⚠️  知识库存储目录不存在（预期行为：免费版无持久化存储）');
+    console.log('🔄 系统将在RAG不可用时使用智能回退响应');
   }
 }
 
@@ -65,7 +66,11 @@ function startServer() {
   // 启动Node.js服务器
   const serverProcess = spawn('node', ['server.js'], {
     stdio: 'inherit',
-    cwd: __dirname
+    cwd: __dirname,
+    env: {
+      ...process.env,
+      NODE_ENV: 'production'
+    }
   });
   
   serverProcess.on('error', (error) => {

@@ -1898,35 +1898,7 @@ app.post('/api/generate_warning_report', upload.array('images', 10), async (req,
   }
 });
 
-// 健康检查API
-app.get('/api/health', (req, res) => {
-  const health = {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: '2.0 - OpenAI统一版',
-    system_status: {
-      openai_client: 'ready',
-      openai_configured: !!process.env.OPENAI_API_KEY,
-      openai_base_url: process.env.OPENAI_API_BASE || 'https://api.openai.com/v1',
-    rag_system: ragSystemReady ? 'ready' : 'not_ready',
-      multimodal_analysis: 'enabled',
-      gpt4_brain: 'enabled',
-      analysis_provider: 'OpenAI GPT-4o'
-    },
-    capabilities: {
-      image_analysis: true,
-      text_analysis: true,
-      rag_knowledge: ragSystemReady,
-      final_report: true
-    },
-    environment: {
-      node_version: process.version,
-      openai_configured: !!process.env.OPENAI_API_KEY
-    }
-  };
-  
-  res.json(health);
-});
+// 删除重复的健康检查端点 - 使用下面的完整版本
 
 // RAG系统状态检查
 app.get('/api/rag-status', (req, res) => {
@@ -2482,25 +2454,46 @@ const callPostDateRAGSystemWithEnhancedQuery = async (enhancedQuery, originalUse
         'deep_analysis', 
         'RAG知识库脚本不存在'
       );
-      return resolve({
+      return {
         success: false,
         error: fallbackResult.error,
         knowledge_answer: fallbackResult.response,
         knowledge_references: [],
         fallback_response: fallbackResult.response
-      });
+      };
     }
     
     // 调用增强版Python RAG系统，使用多样性强制检索机制
-    const ragProcess = spawn(pythonPath, ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: __dirname
-    });
+    let ragProcess;
+    try {
+      ragProcess = spawn(pythonPath, ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: __dirname
+      });
+      
+      console.log('🐍 Python RAG进程已启动, PID:', ragProcess.pid || 'unknown');
+    } catch (spawnError) {
+      console.error('❌ 无法启动Python RAG进程:', spawnError.message);
+      const fallbackResult = buildFallbackResponse(
+        originalUserQuestion, 
+        'deep_analysis', 
+        `无法启动Python进程: ${spawnError.message}`
+      );
+      return {
+        success: false,
+        error: fallbackResult.error,
+        knowledge_answer: fallbackResult.response,
+        knowledge_references: [],
+        fallback_response: fallbackResult.response
+      };
+    }
     
     // 设置超时
     const timeout = setTimeout(() => {
-      ragProcess.kill();
-      console.error('⏰ 情感教练RAG查询超时（300秒）');
+      if (ragProcess && !ragProcess.killed) {
+        ragProcess.kill();
+        console.error('⏰ 情感教练RAG查询超时（300秒）');
+      }
     }, 300000); // 300秒超时（5分钟）
     
     return new Promise((resolve, reject) => {
@@ -2994,7 +2987,7 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
     } else {
       console.log('🧠 选择深度分析路径 (AI查询扩展 + RAG + 专业教练)');
       
-      // 深度分析路径 - 集成AI查询扩展技术
+      // 深度分析路径 - 集成AI查询扩展技术，增强错误处理
       
       // 第3步：AI查询扩展（解决检索偏见）- 新增步骤
       console.log('🔍 第3步：AI查询扩展（解决检索偏见）');
@@ -3040,7 +3033,31 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
       console.log('🚀 使用AI优化查询进行RAG检索，查询长度:', enhancedQuery.length);
       console.log('🔄 优化查询预览:', enhancedQuery.substring(0, 150) + '...');
       
-      const ragResult = await callPostDateRAGSystemWithEnhancedQuery(enhancedQuery, userQuestion, conversationHistory);
+      let ragResult;
+      try {
+        ragResult = await callPostDateRAGSystemWithEnhancedQuery(enhancedQuery, userQuestion, conversationHistory);
+        
+        // 如果RAG调用失败，直接使用回退响应
+        if (!ragResult || !ragResult.success) {
+          console.warn('⚠️ RAG系统调用失败，使用智能回退响应');
+          const fallbackResponse = buildFallbackResponse(userQuestion, 'deep_analysis', 'RAG系统暂时不可用');
+          return {
+            success: true,
+            response: fallbackResponse.response,
+            metadata: fallbackResponse.metadata,
+            troubleshooting: fallbackResponse.troubleshooting
+          };
+        }
+      } catch (ragError) {
+        console.error('❌ RAG知识检索过程发生异常:', ragError.message);
+        const fallbackResponse = buildFallbackResponse(userQuestion, 'deep_analysis', `RAG系统异常: ${ragError.message}`);
+        return {
+          success: true,
+          response: fallbackResponse.response,
+          metadata: fallbackResponse.metadata,
+          troubleshooting: fallbackResponse.troubleshooting
+        };
+      }
       
       // 输出RAG检索详细信息
       if (ragResult.success && ragResult.data) {
@@ -3054,14 +3071,33 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
       
       // 第5步：生成情感教练回复 (传递完整的ragResult对象)
       console.log('🎭 第5步：生成情感教练回复');
-      const coachResponse = await generateCoachResponseWithGPT4o(
-        conversationHistory, 
-        userQuestion, 
-        ragResult  // 传递完整的ragResult而不是构建的字符串
-      );
-      
-      if (!coachResponse.success) {
-        throw new Error(`情感教练回复生成失败: ${coachResponse.error}`);
+      let coachResponse;
+      try {
+        coachResponse = await generateCoachResponseWithGPT4o(
+          conversationHistory, 
+          userQuestion, 
+          ragResult  // 传递完整的ragResult而不是构建的字符串
+        );
+        
+        if (!coachResponse.success) {
+          console.warn('⚠️ GPT-4o教练回复生成失败，使用回退响应');
+          const fallbackResponse = buildFallbackResponse(userQuestion, 'deep_analysis', `教练回复生成失败: ${coachResponse.error}`);
+          return {
+            success: true,
+            response: fallbackResponse.response,
+            metadata: fallbackResponse.metadata,
+            troubleshooting: fallbackResponse.troubleshooting
+          };
+        }
+      } catch (coachError) {
+        console.error('❌ 教练回复生成过程发生异常:', coachError.message);
+        const fallbackResponse = buildFallbackResponse(userQuestion, 'deep_analysis', `教练系统异常: ${coachError.message}`);
+        return {
+          success: true,
+          response: fallbackResponse.response,
+          metadata: fallbackResponse.metadata,
+          troubleshooting: fallbackResponse.troubleshooting
+        };
       }
       
       // 第6步：构建最终响应

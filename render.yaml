@@ -5,11 +5,20 @@ services:
     plan: free
     region: oregon
     buildCommand: |
+      echo "📦 安装Node.js依赖..."
       npm install
-      python3 -m venv venv
-      source venv/bin/activate
-      pip install --upgrade pip
-      pip install -r requirements.txt
+      echo "🐍 创建Python虚拟环境..."
+      python3 -m venv venv || echo "⚠️ Python虚拟环境创建失败，继续使用系统Python"
+      if [ -d "venv" ]; then
+        source venv/bin/activate
+        echo "📚 安装Python依赖到虚拟环境..."
+        pip install --upgrade pip
+        pip install -r requirements.txt || echo "⚠️ Python依赖安装失败，将使用回退模式"
+      else
+        echo "🐍 使用系统Python安装依赖..."
+        pip3 install --user -r requirements.txt || echo "⚠️ Python依赖安装失败，将使用回退模式"
+      fi
+      echo "✅ 构建完成"
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -20,9 +29,5 @@ services:
           name: ai-emotional-safety-backend
           property: port
     healthCheckPath: /api/health
-    disk:
-      name: backend-storage
-      mountPath: /opt/render/project/src/storage
-      sizeGB: 1
     autoDeploy: true
     branch: main 

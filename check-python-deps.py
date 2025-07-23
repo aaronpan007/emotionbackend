@@ -1,61 +1,55 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 检查Python依赖是否正确安装
-用于生产环境启动前的预检查
 """
 
 import sys
-import json
+import importlib
 
-def check_dependencies():
-    """检查所需的Python依赖"""
-    dependencies = [
-        'llama_index',
-        'llama_index.core', 
-        'llama_index.embeddings.huggingface',
-        'dotenv',
-        'pathlib',
-        'logging',
-        'collections',
-        're',
-        'nltk'
-    ]
+# 必需的Python依赖
+REQUIRED_PACKAGES = [
+    'llama_index',
+    'llama_index.core',
+    'llama_index.embeddings.openai',
+    'llama_index.llms.openai',
+    'llama_index.storage.storage_context',
+    'llama_index.storage.docstore',
+    'llama_index.storage.index_store',
+    'llama_index.storage.vector_store',
+    'openai',
+    'nest_asyncio'
+]
+
+def check_package(package_name):
+    """检查单个包是否可导入"""
+    try:
+        importlib.import_module(package_name)
+        print(f"✅ {package_name} - 可用")
+        return True
+    except ImportError as e:
+        print(f"❌ {package_name} - 不可用: {e}")
+        return False
+
+def main():
+    """主检查函数"""
+    print("🐍 检查Python依赖...")
+    print(f"Python版本: {sys.version}")
     
-    results = {
-        'success': True,
-        'installed': [],
-        'missing': [],
-        'python_version': sys.version
-    }
+    success_count = 0
+    total_count = len(REQUIRED_PACKAGES)
     
-    for dep in dependencies:
-        try:
-            if '.' in dep:
-                # 处理子模块导入
-                parts = dep.split('.')
-                module = __import__(parts[0])
-                for part in parts[1:]:
-                    module = getattr(module, part)
-            else:
-                __import__(dep)
-            results['installed'].append(dep)
-        except ImportError as e:
-            results['missing'].append({'name': dep, 'error': str(e)})
-            results['success'] = False
+    for package in REQUIRED_PACKAGES:
+        if check_package(package):
+            success_count += 1
     
-    return results
+    print(f"\n📊 依赖检查结果: {success_count}/{total_count} 可用")
+    
+    if success_count == total_count:
+        print("✅ 所有Python依赖都已正确安装")
+        return 0
+    else:
+        print("⚠️ 部分Python依赖缺失，系统将使用回退模式")
+        return 1
 
 if __name__ == "__main__":
-    try:
-        result = check_dependencies()
-        print(json.dumps(result, indent=2, ensure_ascii=False))
-        sys.exit(0 if result['success'] else 1)
-    except Exception as e:
-        error_result = {
-            'success': False,
-            'error': str(e),
-            'python_version': sys.version
-        }
-        print(json.dumps(error_result, indent=2, ensure_ascii=False))
-        sys.exit(1)
+    sys.exit(main())
