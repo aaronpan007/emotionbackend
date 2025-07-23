@@ -29,6 +29,9 @@ require('dotenv').config();
 // 导入增强的图片分析模块
 const { enhancedAnalyzeImageWithGPT4o } = require('./enhanced_image_analysis');
 
+// 导入回退响应系统
+const { buildFallbackResponse } = require('./fallback-responses');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -2459,12 +2462,34 @@ const callPostDateRAGSystemWithEnhancedQuery = async (enhancedQuery, originalUse
     console.log('   对话历史长度:', conversationHistory.length);
     console.log('   查询类型: post_date_debrief_enhanced_diversity');
     
-    // 检测Python路径
-    const pythonPath = fs.existsSync(path.join(__dirname, 'venv/bin/python')) 
+    // 检测Python路径和RAG系统就绪状态
+    const venvPythonPath = path.join(__dirname, 'venv/bin/python');
+    const pythonPath = fs.existsSync(venvPythonPath) 
       ? './venv/bin/python'
       : 'python3';
     
+    const ragScriptPath = path.join(__dirname, 'rag_query_service_enhanced.py');
+    const ragScriptExists = fs.existsSync(ragScriptPath);
+    
     console.log('🐍 使用Python路径:', pythonPath);
+    console.log('📋 RAG脚本存在:', ragScriptExists);
+    
+    // 如果RAG系统不可用，提前返回智能fallback响应
+    if (!ragScriptExists) {
+      console.error('❌ RAG查询脚本不存在，使用智能fallback响应');
+      const fallbackResult = buildFallbackResponse(
+        originalUserQuestion, 
+        'deep_analysis', 
+        'RAG知识库脚本不存在'
+      );
+      return resolve({
+        success: false,
+        error: fallbackResult.error,
+        knowledge_answer: fallbackResult.response,
+        knowledge_references: [],
+        fallback_response: fallbackResult.response
+      });
+    }
     
     // 调用增强版Python RAG系统，使用多样性强制检索机制
     const ragProcess = spawn(pythonPath, ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
