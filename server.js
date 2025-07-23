@@ -3028,17 +3028,20 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
         };
       }
       
-      // 第4步：RAG知识检索（使用增强查询）
-      console.log('🧠 第4步：RAG知识检索（使用增强查询）');
+      // 第4步：RAG知识检索（使用与predate相同的成功方式）
+      console.log('🧠 第4步：RAG知识检索（使用简化的成功调用方式）');
       console.log('🚀 使用AI优化查询进行RAG检索，查询长度:', enhancedQuery.length);
       console.log('🔄 优化查询预览:', enhancedQuery.substring(0, 150) + '...');
       
       let ragResult;
       try {
-        ragResult = await callPostDateRAGSystemWithEnhancedQuery(enhancedQuery, userQuestion, conversationHistory);
+        // 使用与predate相同的成功RAG调用方式
+        ragResult = await performRAGQueryAsync(enhancedQuery, 'post_date_debrief_diversity');
         
-        // 如果RAG调用失败，直接使用回退响应
-        if (!ragResult || !ragResult.success) {
+        console.log('✅ RAG查询完成，结果:', ragResult ? '成功' : '失败');
+        
+        // 如果RAG调用失败，使用回退响应
+        if (!ragResult) {
           console.warn('⚠️ RAG系统调用失败，使用智能回退响应');
           const fallbackResponse = buildFallbackResponse(userQuestion, 'deep_analysis', 'RAG系统暂时不可用');
           return {
@@ -3059,24 +3062,34 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
         };
       }
       
-      // 输出RAG检索详细信息
-      if (ragResult.success && ragResult.data) {
+      // 输出RAG检索详细信息（适配performRAGQueryAsync格式）
+      if (ragResult && ragResult.status === 'success') {
         console.log('✅ RAG知识检索成功:');
-        console.log('   📄 检索状态:', ragResult.data.rag_analysis?.status || 'unknown');
-        console.log('   📖 知识内容长度:', ragResult.data.rag_analysis?.knowledge_answer?.length || 0);
-        console.log('   📚 引用文档数:', ragResult.data.rag_analysis?.knowledge_references?.length || 0);
+        console.log('   📖 知识内容长度:', ragResult.knowledge_answer?.length || 0);
+        console.log('   📚 引用文档数:', ragResult.knowledge_references?.length || 0);
       } else {
         console.log('⚠️ RAG知识检索失败或无结果');
       }
       
-      // 第5步：生成情感教练回复 (传递完整的ragResult对象)
+      // 第5步：生成情感教练回复 (适配格式)
       console.log('🎭 第5步：生成情感教练回复');
       let coachResponse;
       try {
+        // 将performRAGQueryAsync结果转换为generateCoachResponseWithGPT4o期待的格式
+        const adaptedRagResult = {
+          success: ragResult && ragResult.status === 'success',
+          data: {
+            rag_analysis: {
+              knowledge_answer: ragResult?.knowledge_answer || '',
+              knowledge_references: ragResult?.knowledge_references || []
+            }
+          }
+        };
+        
         coachResponse = await generateCoachResponseWithGPT4o(
           conversationHistory, 
           userQuestion, 
-          ragResult  // 传递完整的ragResult而不是构建的字符串
+          adaptedRagResult
         );
         
         if (!coachResponse.success) {
@@ -3124,7 +3137,7 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
             token_usage: 0,
             optimization_stats: { original_length: userQuestion.length, enhanced_length: userQuestion.length, expansion_ratio: 1.0 }
           },
-          rag_sources: ragResult.data?.rag_analysis?.knowledge_references?.length || 0,
+          rag_sources: ragResult?.knowledge_references?.length || 0,
           tokens_used: (intentResult.tokens_used || 0) + (queryOptimizationResult?.token_usage || 0) + (coachResponse.tokens_used || 0),
           model_used: coachResponse.model_used,
           timestamp: new Date().toISOString()
@@ -3138,7 +3151,7 @@ const processPostDateDebrief = async (conversationHistory, userInput, audioFile 
         意图识别: intentResult.intent,
         AI查询扩展: queryOptimizationResult?.success || false,
         查询扩展比例: queryOptimizationResult?.optimization_stats?.expansion_ratio || 1.0,
-        RAG文档数: ragResult.data?.rag_analysis?.knowledge_references?.length || 0,
+        RAG文档数: ragResult?.knowledge_references?.length || 0,
         回复长度: coachResponse.response.length,
         总Token消耗: (intentResult.tokens_used || 0) + (queryOptimizationResult?.token_usage || 0) + (coachResponse.tokens_used || 0)
       });
