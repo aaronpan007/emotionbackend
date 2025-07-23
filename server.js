@@ -3636,7 +3636,13 @@ ${finalUserInput}
 function performRAGQueryAsync(userInput, queryType) {
   return new Promise((resolve, reject) => {
     const ragInputData = {
-      query: userInput,
+      user_info: {
+        nickname: "咨询用户",
+        profession: "情感咨询",
+        age: "未知",
+        bio: userInput,
+        bioOrChatHistory: userInput
+      },
       query_type: queryType,
       timestamp: new Date().toISOString()
     };
