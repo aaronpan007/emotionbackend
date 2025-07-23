@@ -935,8 +935,15 @@ const callRAGSystem = async (userInfo, imageInfos, enhancedQuery = null) => {
       console.log('   JSON数据大小:', inputJson.length, '字符');
       console.log('   查询类型: pre_date_scan_enhanced_diversity');
       
+      // 检测Python路径
+      const pythonPath = fs.existsSync(path.join(__dirname, 'venv/bin/python')) 
+        ? './venv/bin/python'
+        : 'python3';
+      
+      console.log('🐍 使用Python路径:', pythonPath);
+      
       // 调用增强版Python RAG查询服务（使用多样性强制均衡）
-      const pythonProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', inputJson], {
+      const pythonProcess = spawn(pythonPath, ['rag_query_service_enhanced.py', inputJson], {
         cwd: __dirname,
         stdio: ['pipe', 'pipe', 'pipe'],
         encoding: 'utf8'
@@ -2332,8 +2339,15 @@ const callPostDateRAGSystem = async (userQuestion, conversationHistory = []) => 
     console.log('   对话历史长度:', conversationHistory.length);
     console.log('   查询类型: post_date_debrief_diversity');
     
+    // 检测Python路径
+    const pythonPath = fs.existsSync(path.join(__dirname, 'venv/bin/python')) 
+      ? './venv/bin/python'
+      : 'python3';
+    
+    console.log('🐍 使用Python路径:', pythonPath);
+    
     // 调用增强版Python RAG系统，使用多样性强制检索机制
-    const ragProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+    const ragProcess = spawn(pythonPath, ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: __dirname
     });
@@ -2445,8 +2459,15 @@ const callPostDateRAGSystemWithEnhancedQuery = async (enhancedQuery, originalUse
     console.log('   对话历史长度:', conversationHistory.length);
     console.log('   查询类型: post_date_debrief_enhanced_diversity');
     
+    // 检测Python路径
+    const pythonPath = fs.existsSync(path.join(__dirname, 'venv/bin/python')) 
+      ? './venv/bin/python'
+      : 'python3';
+    
+    console.log('🐍 使用Python路径:', pythonPath);
+    
     // 调用增强版Python RAG系统，使用多样性强制检索机制
-    const ragProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+    const ragProcess = spawn(pythonPath, ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: __dirname
     });
@@ -3546,7 +3567,14 @@ function performRAGQueryAsync(userInput, queryType) {
       timestamp: new Date().toISOString()
     };
     
-    const ragProcess = spawn('./venv/bin/python', ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
+    // 检测Python路径
+    const pythonPath = fs.existsSync(path.join(__dirname, 'venv/bin/python')) 
+      ? './venv/bin/python'
+      : 'python3';
+    
+    console.log('🐍 使用Python路径:', pythonPath);
+    
+    const ragProcess = spawn(pythonPath, ['rag_query_service_enhanced.py', JSON.stringify(ragInputData)], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: __dirname
     });
