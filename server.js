@@ -3548,8 +3548,8 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
     let ragContext = '';
     try {
       const ragResult = await performRAGQueryAsync(finalUserInput, 'post_date_debrief_diversity');
-      ragContext = ragResult.context || '';
-      console.log('✅ RAG查询完成');
+      ragContext = ragResult.knowledge_answer || '';
+      console.log('✅ RAG查询完成，知识长度:', ragContext.length);
     } catch (error) {
       console.error('❌ RAG查询失败:', error.message);
     }
