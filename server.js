@@ -3722,7 +3722,7 @@ app.post('/api/post-date-debrief-async', postDateUpload.single('audio'), async (
     // 立即返回任务ID
     res.json({
       success: true,
-      taskId,
+      task_id: taskId,
       message: '分析任务已创建，请稍后查询结果',
       statusUrl: `/api/task-status/${taskId}`
     });
