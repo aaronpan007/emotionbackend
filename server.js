@@ -3586,9 +3586,9 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
         throw new Error(result.error || '分析处理失败');
       }
     } catch (error) {
-      console.error('❌ 分析处理失败:', error.message);
-      updateTask(taskId, {
-        status: TASK_STATUS.FAILED,
+      console.error(`❌ 异步分析任务失败: ${taskId}`, error);
+      updateTask(taskId, { 
+        status: TASK_STATUS.FAILED, 
         error: error.message,
         result: {
           success: false,
@@ -3596,18 +3596,6 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
           response: '很抱歉，分析过程中出现了问题。请稍后重试，或尝试重新描述您的问题。'
         }
       });
-    
-  } catch (error) {
-    console.error(`❌ 异步分析任务失败: ${taskId}`, error);
-    updateTask(taskId, { 
-      status: TASK_STATUS.FAILED, 
-      error: error.message,
-      result: {
-        success: false,
-        error: error.message,
-        response: '很抱歉，分析过程中出现了问题。请稍后重试，或尝试重新描述您的问题。'
-      }
-    });
   } finally {
     // 清理音频文件
     if (inputData.audioFile && fs.existsSync(inputData.audioFile.path)) {
