@@ -3525,6 +3525,13 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
     
     // 临时绕开RAG，直接测试GPT-4o深度分析
     console.log('🧠 开始GPT-4o直接深度分析（绕开RAG）...');
+    console.log('🔑 API配置检查:');
+    console.log('  - API Key存在:', !!process.env.OPENAI_API_KEY);
+    console.log('  - API Key前缀:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 7) + '...' : '未设置');
+    console.log('  - Base URL:', process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1');
+    console.log('📝 用户输入长度:', user_input?.length || 0);
+    console.log('📝 用户输入内容:', user_input?.substring(0, 100) + '...');
+    
     updateTask(taskId, { progress: 50 });
     
     const systemPrompt = `你是一位资深情感教练，专门分析约会情况并提供专业建议。
@@ -3539,6 +3546,16 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
 
 请用温暖、专业且易懂的语调回复，避免过于学术化的表达。`;
 
+    console.log('🚀 准备发送OpenAI请求...');
+    console.log('📊 请求参数:', {
+      model: 'gpt-4o',
+      messages_count: 2,
+      system_prompt_length: systemPrompt.length,
+      user_input_length: user_input?.length || 0,
+      temperature: 0.7,
+      max_tokens: 2000
+    });
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
@@ -3548,6 +3565,9 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
       temperature: 0.7,
       max_tokens: 2000
     });
+    
+    console.log('✅ OpenAI请求成功完成');
+    console.log('📈 Token使用情况:', completion.usage);
 
     updateTask(taskId, { progress: 80 });
 
@@ -3581,14 +3601,39 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
     });
     console.log('✅ 异步分析任务完成');
     } catch (error) {
-      console.error(`❌ 异步分析任务失败: ${taskId}`, error);
+      console.error(`❌ 异步分析任务失败: ${taskId}`);
+      console.error('错误详情:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack?.split('\n').slice(0, 3).join('\n'),
+        code: error.code,
+        type: error.type,
+        status: error.status
+      });
+      
+      // 特殊处理网络错误
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+        console.error('🌐 网络连接错误 - 可能是API地址不可达或网络问题');
+      } else if (error.status === 401) {
+        console.error('🔑 认证错误 - API密钥可能无效或缺失');
+      } else if (error.status === 429) {
+        console.error('🚫 请求频率限制 - API调用过于频繁');
+      } else if (error.status >= 500) {
+        console.error('🔥 服务器错误 - OpenAI服务可能暂时不可用');
+      }
+      
       updateTask(taskId, { 
         status: TASK_STATUS.FAILED, 
         error: error.message,
         result: {
           success: false,
           error: error.message,
-          response: '很抱歉，分析过程中出现了问题。请稍后重试，或尝试重新描述您的问题。'
+          response: '很抱歉，分析过程中出现了问题。请稍后重试，或尝试重新描述您的问题。',
+          debug_info: {
+            error_type: error.name,
+            error_code: error.code,
+            error_status: error.status
+          }
         }
       });
   } finally {
