@@ -3673,7 +3673,7 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
     updateTask(taskId, { progress: 100 });
     
     updateTask(taskId, { 
-      status: TASK_STATUS.COMPLETED,
+      status: 'completed',
       progress: 100,
       result: {
         success: true,
@@ -3705,7 +3705,7 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
       }
       
       updateTask(taskId, { 
-        status: TASK_STATUS.FAILED, 
+        status: 'failed', 
         error: error.message,
         result: {
           success: false,
@@ -3841,7 +3841,7 @@ app.post('/api/post-date-debrief-async', postDateUpload.single('audio'), async (
       }).catch(error => {
         console.error('❌ 异步任务处理失败:', taskId, error);
         updateTask(taskId, {
-          status: TASK_STATUS.FAILED,
+          status: 'failed',
           error: error.message,
           result: {
             success: false,
