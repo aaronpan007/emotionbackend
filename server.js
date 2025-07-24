@@ -2057,6 +2057,53 @@ app.get('/api/report_status/:taskId', (req, res) => {
   res.json(response);
 });
 
+// 调试端点 - 显示最近的错误日志
+app.get('/api/debug/recent-errors', (req, res) => {
+  res.json({
+    message: '请查看Render控制台日志或浏览器开发者工具的Network标签页',
+    instructions: [
+      '1. 访问 render.com 并登录到你的账户',
+      '2. 找到 ai-emotional-safety-backend 服务',
+      '3. 点击进入服务详情页面',
+      '4. 点击 "Logs" 标签页查看实时日志',
+      '5. 或在浏览器开发者工具的Network标签页查看请求详情'
+    ],
+    current_time: new Date().toISOString(),
+    endpoint_for_testing: '/api/post-date-debrief-async'
+  });
+});
+
+// 简单测试OpenAI连接的端点
+app.get('/api/test-openai', async (req, res) => {
+  try {
+    console.log('🧪 测试OpenAI连接...');
+    console.log('🔑 API Key存在:', !!process.env.OPENAI_API_KEY);
+    console.log('🔗 Base URL:', process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1');
+    
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Hello, just testing connection. Please reply with "Connection successful!"' }],
+      max_tokens: 20
+    });
+    
+    res.json({
+      success: true,
+      message: 'OpenAI连接测试成功',
+      response: completion.choices[0].message.content,
+      tokens_used: completion.usage?.total_tokens || 0
+    });
+  } catch (error) {
+    console.error('OpenAI连接测试失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      error_type: error.name,
+      error_code: error.code,
+      error_status: error.status
+    });
+  }
+});
+
 // 启动服务器并设置全局超时
 const server = app.listen(PORT, () => {
   console.log('🔧 ===== 增强图片分析模块 =====');
@@ -3398,12 +3445,17 @@ app.get('/api/health', async (req, res) => {
         node_env: process.env.NODE_ENV || 'development',
         port: PORT,
         has_openai_key: !!process.env.OPENAI_API_KEY,
+        openai_key_prefix: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 7) + '...' : 'NOT_SET',
+        openai_base_url: process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
         has_replicate_token: !!process.env.REPLICATE_API_TOKEN,
+        replicate_token_prefix: process.env.REPLICATE_API_TOKEN ? process.env.REPLICATE_API_TOKEN.substring(0, 7) + '...' : 'NOT_SET',
         has_r2_config: !!(
           process.env.CLOUDFLARE_R2_ACCESS_KEY_ID && 
           process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY &&
           process.env.CLOUDFLARE_R2_BUCKET_NAME
-        )
+        ),
+        memory_usage: process.memoryUsage(),
+        uptime_seconds: Math.floor(process.uptime())
       },
       cors_origins: corsOptions.origin
     };
