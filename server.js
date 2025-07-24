@@ -3524,11 +3524,10 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
     console.log('🧠 开始使用同步处理逻辑进行深度分析...');
     
     // 临时绕开RAG，直接测试GPT-4o深度分析
-    try {
-      console.log('🧠 开始GPT-4o直接深度分析（绕开RAG）...');
-      updateTask(taskId, { progress: 50 });
-      
-      const systemPrompt = `你是一位资深情感教练，专门分析约会情况并提供专业建议。
+    console.log('🧠 开始GPT-4o直接深度分析（绕开RAG）...');
+    updateTask(taskId, { progress: 50 });
+    
+    const systemPrompt = `你是一位资深情感教练，专门分析约会情况并提供专业建议。
 
 请针对用户的约会情况进行深度分析，包括：
 
@@ -3540,51 +3539,47 @@ async function processPostDateAnalysisAsync(taskId, inputData) {
 
 请用温暖、专业且易懂的语调回复，避免过于学术化的表达。`;
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: user_input }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: user_input }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000
+    });
 
-      updateTask(taskId, { progress: 80 });
+    updateTask(taskId, { progress: 80 });
 
-      const analysis = completion.choices[0]?.message?.content || '分析生成失败，请重试。';
-      
-      const result = {
-        success: true,
-        response: analysis,
-        metadata: {
-          processing_steps: ['文本输入', '意图识别', 'GPT-4o深度分析'],
-          processing_type: 'deep_analysis_no_rag',
-          has_audio: !!audioFile,
-          response_length: analysis.length,
-          tokens_used: completion.usage?.total_tokens || 0,
-          model_used: 'gpt-4o',
-          timestamp: new Date().toISOString(),
-          note: '临时版本：未使用RAG知识库'
-        }
-      };
-      
-      updateTask(taskId, { progress: 80 });
-      
-      if (result.success) {
-        updateTask(taskId, { 
-          status: TASK_STATUS.COMPLETED,
-          progress: 100,
-          result: {
-            success: true,
-            response: result.response,
-            metadata: result.metadata
-          }
-        });
-        console.log('✅ 异步分析任务完成');
-      } else {
-        throw new Error(result.error || '分析处理失败');
+    const analysis = completion.choices[0]?.message?.content || '分析生成失败，请重试。';
+    
+    const result = {
+      success: true,
+      response: analysis,
+      metadata: {
+        processing_steps: ['文本输入', '意图识别', 'GPT-4o深度分析'],
+        processing_type: 'deep_analysis_no_rag',
+        has_audio: !!audioFile,
+        response_length: analysis.length,
+        tokens_used: completion.usage?.total_tokens || 0,
+        model_used: 'gpt-4o',
+        timestamp: new Date().toISOString(),
+        note: '临时版本：未使用RAG知识库'
       }
+    };
+    
+    updateTask(taskId, { progress: 100 });
+    
+    updateTask(taskId, { 
+      status: TASK_STATUS.COMPLETED,
+      progress: 100,
+      result: {
+        success: true,
+        response: result.response,
+        metadata: result.metadata
+      }
+    });
+    console.log('✅ 异步分析任务完成');
     } catch (error) {
       console.error(`❌ 异步分析任务失败: ${taskId}`, error);
       updateTask(taskId, { 
