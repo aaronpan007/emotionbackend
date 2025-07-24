@@ -3460,8 +3460,38 @@ app.get('/api/health', async (req, res) => {
       cors_origins: corsOptions.origin
     };
 
-    // 检查OpenAI配置
-    healthStatus.services.openai = process.env.OPENAI_API_KEY ? 'configured' : 'missing';
+    // 检查OpenAI配置并测试连接
+    if (process.env.OPENAI_API_KEY) {
+      healthStatus.services.openai = 'configured';
+      
+      // 如果请求中包含test参数，则测试OpenAI连接
+      if (req.query.test === 'openai') {
+        try {
+          console.log('🧪 Health端点中测试OpenAI连接...');
+          const testCompletion = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: 'Test connection' }],
+            max_tokens: 10
+          });
+          healthStatus.openai_test = {
+            success: true,
+            response: testCompletion.choices[0].message.content,
+            tokens: testCompletion.usage?.total_tokens || 0
+          };
+          console.log('✅ OpenAI连接测试成功');
+        } catch (error) {
+          console.error('❌ OpenAI连接测试失败:', error);
+          healthStatus.openai_test = {
+            success: false,
+            error: error.message,
+            error_type: error.name,
+            error_code: error.code
+          };
+        }
+      }
+    } else {
+      healthStatus.services.openai = 'missing';
+    }
 
     // 检查RAG系统状态
     try {
