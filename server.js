@@ -3822,13 +3822,37 @@ app.post('/api/post-date-debrief-async', postDateUpload.single('audio'), async (
     });
     
     // 异步处理任务
-    processPostDateAnalysisAsync(taskId, {
-      user_input,
-      conversation_history,
-      audioFile
-    }).catch(error => {
-      console.error('异步任务处理失败:', error);
+    console.log(`🚀 准备启动异步任务: ${taskId}`);
+    console.log('📝 输入数据:', {
+      user_input_length: user_input?.length || 0,
+      conversation_history_length: conversation_history?.length || 0,
+      has_audio: !!audioFile,
+      audio_info: audioFile ? {
+        originalname: audioFile.originalname,
+        size: audioFile.size
+      } : null
     });
+    
+    setImmediate(() => {
+      processPostDateAnalysisAsync(taskId, {
+        user_input,
+        conversation_history,
+        audioFile
+      }).catch(error => {
+        console.error('❌ 异步任务处理失败:', taskId, error);
+        updateTask(taskId, {
+          status: TASK_STATUS.FAILED,
+          error: error.message,
+          result: {
+            success: false,
+            error: error.message,
+            response: '异步任务启动失败，请重试。'
+          }
+        });
+      });
+    });
+    
+    console.log(`✅ 异步任务已加入队列: ${taskId}`);
     
   } catch (error) {
     console.error('❌ 创建异步任务失败:', error);
