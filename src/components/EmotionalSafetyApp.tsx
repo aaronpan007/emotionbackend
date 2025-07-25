@@ -28,7 +28,14 @@ import {
 import ReportDisplay from './ReportDisplay'
 
 // 在文件顶部添加API基础URL配置
-const API_BASE_URL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.DEV ? 'http://localhost:3001' : 'https://ai-emotional-safety-backend.onrender.com');
+
+// 添加调试日志
+console.log('🔧 前端API配置调试信息:');
+console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+console.log('DEV模式:', import.meta.env.DEV);
+console.log('最终API_BASE_URL:', API_BASE_URL);
 
 // 配置marked选项以确保安全渲染
 marked.setOptions({
